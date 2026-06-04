@@ -1,0 +1,389 @@
+enum BenchmarkTaskType {
+  BinaryClassification
+  MultipleChoice
+  OpenGeneration
+  ClosedGeneration
+}
+
+enum BenchmarkModality {
+  text
+  image
+  audio
+  multimodal
+  video
+}
+
+enum BenchmarkModalityDirection {
+  input
+  output
+}
+
+enum BenchmarkLanguage {
+  ru
+  en
+  multilingual
+}
+
+enum BenchmarkDifficulty {
+  primary
+  secondary
+  higher
+  expert
+}
+
+enum BenchmarkValidationStatus {
+  validation
+  published
+  rejected
+}
+
+enum BenchmarkLinkType {
+  obs
+  gitverse
+  github
+  docs
+  dataset
+  score_racoon
+  giga_metrics
+  other
+}
+
+model Benchmark {
+  id String @id @db.VarChar(160)
+
+  name          String  @db.VarChar(500)
+  nameEn        String  @map("name_en") @db.VarChar(500)
+  description   String? @db.Text
+  descriptionEn String? @map("description_en") @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  tests BenchmarkTest[]
+
+  metricResults    MetricResult[]
+  metricUploadRows MetricUploadRow[]
+
+  @@index([deletedAt])
+  @@map("benchmarks")
+}
+
+model BenchmarkTest {
+  id String @id @db.VarChar(160)
+
+  benchmarkId String    @map("benchmark_id") @db.VarChar(160)
+  benchmark   Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
+
+  name             String  @db.VarChar(500)
+  nameEn           String  @map("name_en") @db.VarChar(500)
+  slug             String? @db.VarChar(200)
+  description      String? @db.Text
+  descriptionEn    String? @map("description_en") @db.Text
+  shortDescription String? @map("short_description") @db.Text
+  taskDescription  String? @map("task_description") @db.Text
+
+  instructions   String? @db.Text
+  instructionsEn String? @map("instructions_en") @db.Text
+
+  codebaseName String? @map("codebase_name") @db.VarChar(255)
+  codebaseUrl  String? @map("codebase_url") @db.VarChar(2000)
+
+  macroGroup String? @map("macro_group") @db.VarChar(255)
+
+  taskType   BenchmarkTaskType?   @map("task_type")
+  language   BenchmarkLanguage?   @default(ru)
+  difficulty BenchmarkDifficulty? @default(higher)
+
+  confidenceScore Float? @map("confidence_score")
+
+  confidentialityLevel String? @map("confidentiality_level") @db.VarChar(120)
+  knowledgeLevel       String? @map("knowledge_level") @db.VarChar(120)
+  importance           String? @db.VarChar(120)
+  importanceComment    String? @map("importance_comment") @db.Text
+
+  contextFieldFormat String? @map("context_field_format") @db.VarChar(255)
+  answerFieldFormat  String? @map("answer_field_format") @db.VarChar(255)
+  evaluationLogic    String? @map("evaluation_logic") @db.Text
+
+  humanBaseline      Float?  @map("human_baseline")
+  humanBaselineNotes String? @map("human_baseline_notes") @db.Text
+
+  recommendedMetricsDescription String? @map("recommended_metrics_description") @db.Text
+  requiredGigaChatQualityLevel  String? @map("required_gigachat_quality_level") @db.VarChar(120)
+
+  sizeInSamples         Int? @map("size_in_samples")
+  medianSampleSizeWords Int? @map("median_sample_words")
+
+  requestLenMin    Int? @map("request_len_min")
+  requestLenMedian Int? @map("request_len_median")
+  requestLenMax    Int? @map("request_len_max")
+
+  responseLenMin    Int? @map("response_len_min")
+  responseLenMedian Int? @map("response_len_median")
+  responseLenMax    Int? @map("response_len_max")
+
+  fewShot     Boolean @default(false) @map("few_shot")
+  rag         Boolean @default(false)
+  tools       Boolean @default(false)
+  reasoning   Boolean @default(false)
+  longContext Boolean @default(false) @map("long_context")
+
+  isDifficultyAutoCalculated   Boolean @default(false) @map("is_difficulty_auto_calculated")
+  difficultyCalculationComment String? @map("difficulty_calculation_comment") @db.Text
+
+  gigaMetricsCodebaseUrl   String? @map("giga_metrics_codebase_url") @db.VarChar(2000)
+  gigaMetricsAdapterName   String? @map("giga_metrics_adapter_name") @db.VarChar(255)
+  gigaMetricsSetUrl        String? @map("giga_metrics_set_url") @db.VarChar(2000)
+  gigaMetricsLaunchCommand String? @map("giga_metrics_launch_command") @db.Text
+
+  validationStatus BenchmarkValidationStatus? @map("validation_status")
+  isGenerated      Boolean                    @default(false) @map("is_generated")
+  jiraTicketId     String?                    @map("jira_ticket_id") @db.VarChar(255)
+  generatedAt      DateTime?                  @map("generated_at") @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  skills        BenchmarkTestSkill[]
+  abilityTaxons BenchmarkTestAbilityTaxon[]
+  abilityTags   BenchmarkTestAbilityTag[]
+  subGroups     BenchmarkTestSubGroup[]
+  domains       BenchmarkTestDomain[]
+  subdomains    BenchmarkTestSubdomain[]
+  modalities    BenchmarkTestModality[]
+  projectGroups BenchmarkTestProjectGroup[]
+  featureLabels BenchmarkTestFeatureLabel[]
+
+  metrics          BenchmarkTestMetric[]
+  metricResults    MetricResult[]
+  metricUploadRows MetricUploadRow[]
+  examples         BenchmarkExample[]
+  references       BenchmarkReference[]
+  links            BenchmarkLink[]
+  subDatasets      DatasetSubset[]
+
+  @@index([benchmarkId])
+  @@index([macroGroup])
+  @@index([taskType])
+  @@index([language])
+  @@index([difficulty])
+  @@index([deletedAt])
+  @@map("benchmark_tests")
+}
+
+model BenchmarkTestSkill {
+  testId    String @map("test_id") @db.VarChar(160)
+  skill     String @db.VarChar(255)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@id([testId, skill])
+  @@index([skill])
+  @@map("benchmark_test_skills")
+}
+
+model BenchmarkTestAbilityTaxon {
+  testId    String @map("test_id") @db.VarChar(160)
+  taxon     String @db.VarChar(255)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@id([testId, taxon])
+  @@index([taxon])
+  @@map("benchmark_test_ability_taxons")
+}
+
+model BenchmarkTestAbilityTag {
+  testId    String @map("test_id") @db.VarChar(160)
+  tag       String @db.VarChar(255)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@id([testId, tag])
+  @@index([tag])
+  @@map("benchmark_test_ability_tags")
+}
+
+model BenchmarkTestSubGroup {
+  testId    String @map("test_id") @db.VarChar(160)
+  subGroup  String @map("sub_group") @db.VarChar(255)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@id([testId, subGroup])
+  @@index([subGroup])
+  @@map("benchmark_test_sub_groups")
+}
+
+model BenchmarkTestDomain {
+  testId    String @map("test_id") @db.VarChar(160)
+  domain    String @db.VarChar(255)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@id([testId, domain])
+  @@index([domain])
+  @@map("benchmark_test_domains")
+}
+
+model BenchmarkTestSubdomain {
+  testId    String @map("test_id") @db.VarChar(160)
+  subdomain String @db.VarChar(255)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@id([testId, subdomain])
+  @@index([subdomain])
+  @@map("benchmark_test_subdomains")
+}
+
+model BenchmarkTestModality {
+  testId    String                     @map("test_id") @db.VarChar(160)
+  modality  BenchmarkModality
+  direction BenchmarkModalityDirection @default(input)
+  sortOrder Int                        @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@id([testId, modality, direction])
+  @@index([modality])
+  @@map("benchmark_test_modalities")
+}
+
+model BenchmarkTestProjectGroup {
+  testId       String @map("test_id") @db.VarChar(160)
+  projectGroup String @map("project_group") @db.VarChar(255)
+  sortOrder    Int    @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@id([testId, projectGroup])
+  @@index([projectGroup])
+  @@map("benchmark_test_project_groups")
+}
+
+model BenchmarkTestFeatureLabel {
+  testId       String @map("test_id") @db.VarChar(160)
+  featureLabel String @map("feature_label") @db.VarChar(255)
+  sortOrder    Int    @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@id([testId, featureLabel])
+  @@index([featureLabel])
+  @@map("benchmark_test_feature_labels")
+}
+
+model DatasetSubset {
+  id     String @id @db.VarChar(160)
+  testId String @map("test_id") @db.VarChar(160)
+
+  name        String  @db.VarChar(500)
+  nameEn      String? @map("name_en") @db.VarChar(500)
+  description String? @db.Text
+
+  split                 String?            @db.VarChar(120)
+  taskType              BenchmarkTaskType? @map("task_type")
+  sizeInSamples         Int?               @map("size_in_samples")
+  medianSampleSizeWords Int?               @map("median_sample_words")
+
+  requestLenMin    Int? @map("request_len_min")
+  requestLenMedian Int? @map("request_len_median")
+  requestLenMax    Int? @map("request_len_max")
+
+  responseLenMin    Int? @map("response_len_min")
+  responseLenMedian Int? @map("response_len_median")
+  responseLenMax    Int? @map("response_len_max")
+
+  sortOrder Int @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  domains    DatasetSubsetDomain[]
+  subdomains DatasetSubsetSubdomain[]
+  examples   BenchmarkExample[]
+
+  metricResults    MetricResult[]
+  metricUploadRows MetricUploadRow[]
+
+  @@index([testId])
+  @@map("dataset_subsets")
+}
+
+model DatasetSubsetDomain {
+  subsetId  String @map("subset_id") @db.VarChar(160)
+  domain    String @db.VarChar(255)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  subset DatasetSubset @relation(fields: [subsetId], references: [id], onDelete: Cascade)
+
+  @@id([subsetId, domain])
+  @@map("dataset_subset_domains")
+}
+
+model DatasetSubsetSubdomain {
+  subsetId  String @map("subset_id") @db.VarChar(160)
+  subdomain String @db.VarChar(255)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  subset DatasetSubset @relation(fields: [subsetId], references: [id], onDelete: Cascade)
+
+  @@id([subsetId, subdomain])
+  @@map("dataset_subset_subdomains")
+}
+
+model BenchmarkExample {
+  id       Int     @id @default(autoincrement())
+  testId   String  @map("test_id") @db.VarChar(160)
+  subsetId String? @map("subset_id") @db.VarChar(160)
+
+  input       String  @db.Text
+  output      String  @db.Text
+  explanation String? @db.Text
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  test   BenchmarkTest  @relation(fields: [testId], references: [id], onDelete: Cascade)
+  subset DatasetSubset? @relation(fields: [subsetId], references: [id], onDelete: Cascade)
+
+  @@index([testId])
+  @@index([subsetId])
+  @@map("benchmark_examples")
+}
+
+model BenchmarkReference {
+  id     Int    @id @default(autoincrement())
+  testId String @map("test_id") @db.VarChar(160)
+
+  title     String @db.VarChar(500)
+  url       String @db.VarChar(2000)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@index([testId])
+  @@map("benchmark_references")
+}
+
+model BenchmarkLink {
+  id     Int    @id @default(autoincrement())
+  testId String @map("test_id") @db.VarChar(160)
+
+  type      BenchmarkLinkType
+  title     String            @db.VarChar(500)
+  url       String            @db.VarChar(2000)
+  sortOrder Int               @default(0) @map("sort_order")
+
+  test BenchmarkTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@index([testId])
+  @@index([type])
+  @@map("benchmark_links")
+}
