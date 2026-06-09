@@ -26,3 +26,16 @@ export type RedisEnvType = {
   host: string;
   port: number;
 };
+
+export type AgentMode = 'mock' | 'ws';
+
+export type AgentEnvType = {
+  mode: AgentMode;
+  wsUrl: string;
+  apiKey: string;
+  reconnectInitialDelayMs: number;
+  reconnectMaxDelayMs: number;
+  reconnectMaxAttempts: number;
+  heartbeatIntervalMs: number;
+  heartbeatTimeoutMs: number;
+};
