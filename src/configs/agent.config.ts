@@ -1,16 +1,9 @@
 import { registerAs } from '@nestjs/config';
+import { parseIntWithFallback } from '@/common/utils/parseIntWithFallback';
 import { AgentEnvType, AgentMode } from './types';
 
 const parseMode = (value: string | undefined): AgentMode => {
   return 'ws' === value ? 'ws' : 'mock';
-};
-
-const parseIntWithFallback = (
-  value: string | undefined,
-  fallback: number
-): number => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
 export default registerAs('agent', (): AgentEnvType => ({
@@ -33,4 +26,3 @@ export default registerAs('agent', (): AgentEnvType => ({
     process.env.AGENT_HEARTBEAT_TIMEOUT_MS, 10_000
   ),
 }));
-//  Нужно чтобы значения из env прокидывать более красиво

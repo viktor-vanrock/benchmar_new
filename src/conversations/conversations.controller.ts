@@ -1,6 +1,7 @@
-import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation } from '@nestjs/swagger';
 import { Public } from '@/common/decorators/public.decorator';
+import { PaginationDto } from '@/common/dtos/paginationDto.dto';
 import { ConversationsService } from './conversations.service';
 
 @Public()
@@ -11,11 +12,11 @@ export class ConversationsController {
   @Get()
   @ApiOperation({
     summary: 'List conversations',
-    description: 'Returns all conversations ordered by createdAt desc.',
+    description: 'Returns paginated conversations ordered by createdAt desc.',
   })
-  @ApiOkResponse({ description: 'Array of conversations' })
-  async findAll() {
-    return this.service.findAll();
+  @ApiOkResponse({ description: 'Paginated conversations response' })
+  async findAll(@Query() queryParams: PaginationDto) {
+    return this.service.findAll(queryParams);
   }
 
   @Get(':id')

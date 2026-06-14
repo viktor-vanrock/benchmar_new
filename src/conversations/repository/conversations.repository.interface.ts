@@ -1,8 +1,11 @@
+import { PaginationDto } from '@/common/dtos/paginationDto.dto';
+import { InfiniteDataResponseType } from '@/common/types/infiniteDataResponse.type';
 import {
   Conversation,
   ConversationIntent,
   ConversationStatus,
   Message,
+  MessageKind,
   Prisma,
 } from '@/generated/prisma/client';
 import { ConversationWithMessages } from '../types';
@@ -10,7 +13,7 @@ import { ConversationWithMessages } from '../types';
 export type CreateMessageInput = {
   conversationId: string;
   role: 'agent' | 'user';
-  kind: 'question' | 'option' | 'text';
+  kind: MessageKind;
   content: string;
   optionId?: string | null;
   options?: Prisma.InputJsonValue | null;
@@ -19,7 +22,9 @@ export type CreateMessageInput = {
 export abstract class IConversationsRepository {
   abstract createConversation(userId: string): Promise<Conversation>;
 
-  abstract findAll(): Promise<Conversation[]>;
+  abstract findAll(
+    query: PaginationDto,
+  ): Promise<InfiniteDataResponseType<Conversation>>;
 
   abstract findByIdWithMessages(
     id: string,

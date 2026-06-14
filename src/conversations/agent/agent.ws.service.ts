@@ -14,19 +14,19 @@ import {
   IAgentService,
 } from './agent.service.interface';
 
-type SessionState = {
-  ws: WebSocket | null;
+export type SessionState = {
+  ws: Nullable<WebSocket>;
   emitter: EventEmitter;
   /** буфер сообщений, отправленных до открытия соединения */
   pending: AgentOutgoingPayload[];
   /** счётчик неудачных попыток подключения */
   reconnectAttempt: number;
   /** таймер на следующую попытку reconnect */
-  reconnectTimer: NodeJS.Timeout | null;
+  reconnectTimer: Nullable<NodeJS.Timeout>;
   /** интервал heartbeat ping */
-  heartbeatInterval: NodeJS.Timeout | null;
+  heartbeatInterval: Nullable<NodeJS.Timeout>;
   /** таймер ожидания pong */
-  heartbeatTimeout: NodeJS.Timeout | null;
+  heartbeatTimeout: Nullable<NodeJS.Timeout>;
   /** флаг — пользователь сам закрыл сессию, reconnect не нужен */
   closedByUser: boolean;
 };
@@ -119,7 +119,12 @@ implements IAgentService, OnModuleInit, OnModuleDestroy {
 
   close(conversationId: string): void {
     const session = this.sessions.get(conversationId);
-    if (!session) return;
+    if (!session) {
+      this.logger.debug(
+        `close() called for unknown or already closed session: conversationId="${conversationId}"`
+      );
+      return;
+    }
 
     session.closedByUser = true;
     this.clearTimers(session);

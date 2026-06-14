@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { PaginationDto } from '@/common/dtos/paginationDto.dto';
+import { InfiniteDataResponseType } from '@/common/types/infiniteDataResponse.type';
 import {
   Conversation,
   ConversationIntent,
@@ -31,10 +33,31 @@ export class ConversationsRepository implements IConversationsRepository {
     return conversation;
   }
 
-  async findAll(): Promise<Conversation[]> {
-    return this.prisma.conversation.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(
+    queryParams: PaginationDto
+  ): Promise<InfiniteDataResponseType<Conversation>> {
+    const { page, limit } = queryParams;
+
+    this.logger.debug(
+      `Fetching conversations: page=${page}, limit=${limit}`
+    );
+
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.conversation.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.conversation.count(),
+    ]);
+
+    this.logger.debug(
+      `Fetched conversations: returned=${data.length}, total=${total}`
+    );
+
+    return { data, total };
   }
 
   async findByIdWithMessages(

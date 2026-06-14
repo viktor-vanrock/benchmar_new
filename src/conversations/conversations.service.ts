@@ -5,6 +5,8 @@ import {
   NotFoundException,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { PaginationDto } from '@/common/dtos/paginationDto.dto';
+import { InfiniteDataResponseType } from '@/common/types/infiniteDataResponse.type';
 import {
   Conversation,
   ConversationStatus,
@@ -16,15 +18,18 @@ import { IAgentService } from './agent/agent.service.interface';
 import { IConversationsRepository } from './repository/conversations.repository.interface';
 import {
   AgentInitPayload,
+  AgentMessageHandler,
   AgentMessageOption,
   AgentMessagePayload,
   AgentQuestionContent,
   ConversationWithMessages,
   HistoryEntry,
+  SendUserMessageParams,
+  StartChatParams,
   UserMessageContent,
 } from './types';
 
-export type AgentMessageHandler = (payload: AgentMessagePayload) => void;
+export type { AgentMessageHandler } from './types';
 
 /**
  * Бизнес логика чата.
@@ -46,8 +51,12 @@ export class ConversationsService implements OnModuleDestroy {
     private readonly agent: IAgentService
   ) {}
 
-  async findAll(): Promise<Conversation[]> {
-    return this.repository.findAll();
+  async findAll(
+    queryParams: PaginationDto
+  ): Promise<InfiniteDataResponseType<Conversation>> {
+    this.logger.debug('Fetching all conversations');
+
+    return this.repository.findAll(queryParams);
   }
 
   async findByIdWithMessages(id: string): Promise<ConversationWithMessages> {
@@ -63,11 +72,7 @@ export class ConversationsService implements OnModuleDestroy {
    * Возвращает conversationId.
    * agent_message приходят асинхронно через onAgent.
    */
-  async startChat(params: {
-    conversationId?: string;
-    userId: string;
-    onAgent: AgentMessageHandler;
-  }): Promise<string> {
+  async startChat(params: StartChatParams): Promise<string> {
     let conversation: Conversation | null = null;
 
     if (params.conversationId) {
@@ -104,13 +109,7 @@ export class ConversationsService implements OnModuleDestroy {
    * - сохраняет сообщение в БД
    * - пересылает в мок
    */
-  async sendUserMessage(params: {
-    conversationId: string;
-    kind: 'option' | 'text';
-    value: string;
-    label?: string;
-    onAgent: AgentMessageHandler;
-  }): Promise<void> {
+  async sendUserMessage(params: SendUserMessageParams): Promise<void> {
     const conversation = await this.repository.findById(params.conversationId);
     if (!conversation) {
       throw new NotFoundException(

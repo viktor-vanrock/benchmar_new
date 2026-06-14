@@ -1,4 +1,4 @@
-import { Logger, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Logger, UseGuards } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -9,16 +9,15 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Public } from '@/common/decorators/public.decorator';
+import { WsJwtAuthGuard } from '@/auth/jwt/ws-jwt-auth.guard';
+import { WsCurrentUser } from '@/common/decorators/wsCurrentUser.decorator';
 import { ConversationsService } from './conversations.service';
 import { SendMessageDto } from './dto/sendMessage.dto';
 import { StartChatDto } from './dto/startChat.dto';
 import { AgentMessagePayload } from './types';
+import type { RequestUser } from '@/common/types/request.type';
 
-const DEFAULT_USER_ID = 'test-user';
-
-@Public()
-@UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+@UseGuards(WsJwtAuthGuard)
 @WebSocketGateway({
   cors: {
     origin: '*',
@@ -57,12 +56,13 @@ implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('start_chat')
   async onStartChat(
     @ConnectedSocket() client: Socket,
+    @WsCurrentUser() user: RequestUser,
     @MessageBody() body: StartChatDto
   ): Promise<void> {
     try {
       const conversationId = await this.service.startChat({
         conversationId: body?.conversationId,
-        userId: DEFAULT_USER_ID,
+        userId: user.id,
         onAgent: (payload) => this.pushAgentMessage(client, payload),
       });
 

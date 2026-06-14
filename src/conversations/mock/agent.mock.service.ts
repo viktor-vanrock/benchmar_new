@@ -1,24 +1,25 @@
 import { EventEmitter } from 'events';
 import { Injectable, Logger } from '@nestjs/common';
 import { IAgentService } from '../agent/agent.service.interface';
+import { SessionState as SessionStateAgentWsService } from '../agent/agent.ws.service';
 import {
   AgentMessagePayload,
   AgentOutgoingPayload,
   HistoryEntry,
 } from '../types';
 
-type SessionStep =
-  | 'await_init'
-  | 'await_initial_text'
-  | 'await_yes_no'
-  | 'await_domain'
-  | 'await_difficulty'
-  | 'await_dataset_size'
-  | 'closed';
+const SessionStep = {
+  AwaitInit: 'await_init',
+  AwaitInitialText: 'await_initial_text',
+  AwaitYesNo: 'await_yes_no',
+  AwaitDomain: 'await_domain',
+  AwaitDifficulty: 'await_difficulty',
+  AwaitDatasetSize: 'await_dataset_size',
+  Closed: 'closed',
+} as const;
 
-type SessionState = {
-  emitter: EventEmitter;
-  step: SessionStep;
+type SessionState = Pick<SessionStateAgentWsService, 'emitter'> & {
+  step: typeof SessionStep[keyof typeof SessionStep];
 };
 
 /**
@@ -42,7 +43,7 @@ export class AgentMockService implements IAgentService {
 
     this.sessions.set(conversationId, {
       emitter: new EventEmitter(),
-      step: 'await_init',
+      step: SessionStep.AwaitInit,
     });
 
     this.logger.log(`Mock connected: conversationId="${conversationId}"`);
@@ -64,7 +65,7 @@ export class AgentMockService implements IAgentService {
 
   send(conversationId: string, data: AgentOutgoingPayload): void {
     const session = this.sessions.get(conversationId);
-    if (!session || 'closed' === session.step) {
+    if (!session || SessionStep.Closed === session.step) {
       this.logger.warn(
         `Cannot send — no active mock session for conversationId="${conversationId}"`
       );
@@ -78,7 +79,7 @@ export class AgentMockService implements IAgentService {
     if (!session) return;
 
     session.emitter.removeAllListeners();
-    session.step = 'closed';
+    session.step = SessionStep.Closed;
     this.sessions.delete(conversationId);
 
     this.logger.log(`Mock closed: conversationId="${conversationId}"`);
@@ -86,7 +87,7 @@ export class AgentMockService implements IAgentService {
 
   private handle(conversationId: string, data: AgentOutgoingPayload): void {
     const session = this.sessions.get(conversationId);
-    if (!session || 'closed' === session.step) return;
+    if (!session || SessionStep.Closed === session.step) return;
 
     try {
       if ('init' === data.type) {
@@ -111,49 +112,53 @@ export class AgentMockService implements IAgentService {
     session: SessionState
   ): void {
     const userAnswers = history.filter((h) => 'user' === h.role);
+    const answerCount = userAnswers.length;
 
-    if (0 === userAnswers.length) {
-      session.step = 'await_initial_text';
-      this.emit(conversationId, this.initialQuestion());
-      return;
+    switch (answerCount) {
+      case 0:
+        session.step = SessionStep.AwaitInitialText;
+        this.emit(conversationId, this.initialQuestion());
+        break;
+
+      case 1:
+        session.step = SessionStep.AwaitYesNo;
+        this.emit(conversationId, this.yesNoQuestion());
+        break;
+
+      case 2: {
+      // Блок для проверки yesNo
+        const yesNo = userAnswers[1];
+        const acceptedFirst =
+          'option' === yesNo.content.kind && '1' === yesNo.content.id;
+
+        if (acceptedFirst) {
+          session.step = SessionStep.Closed;
+          this.emit(conversationId, this.finalAccepted());
+          break;
+        }
+
+        // Если не acceptedFirst, переходим к следующему вопросу
+        session.step = SessionStep.AwaitDomain;
+        this.emit(conversationId, this.domainQuestion());
+        break;
+      }
+
+      case 3:
+        session.step = SessionStep.AwaitDifficulty;
+        this.emit(conversationId, this.difficultyQuestion());
+        break;
+
+      case 4:
+        session.step = SessionStep.AwaitDatasetSize;
+        this.emit(conversationId, this.datasetSizeQuestion());
+        break;
+
+      default:
+      // 5+ ответов или необработанный случай
+        session.step = SessionStep.Closed;
+        this.emit(conversationId, this.finalNarrowed());
+        break;
     }
-
-    if (1 === userAnswers.length) {
-      session.step = 'await_yes_no';
-      this.emit(conversationId, this.yesNoQuestion());
-      return;
-    }
-
-    const yesNo = userAnswers[1];
-    const acceptedFirst =
-      'option' === yesNo.content.kind && '1' === yesNo.content.id;
-
-    if (acceptedFirst) {
-      session.step = 'closed';
-      this.emit(conversationId, this.finalAccepted());
-      return;
-    }
-
-    if (2 === userAnswers.length) {
-      session.step = 'await_domain';
-      this.emit(conversationId, this.domainQuestion());
-      return;
-    }
-
-    if (3 === userAnswers.length) {
-      session.step = 'await_difficulty';
-      this.emit(conversationId, this.difficultyQuestion());
-      return;
-    }
-
-    if (4 === userAnswers.length) {
-      session.step = 'await_dataset_size';
-      this.emit(conversationId, this.datasetSizeQuestion());
-      return;
-    }
-
-    session.step = 'closed';
-    this.emit(conversationId, this.finalNarrowed());
   }
 
   private handleClientMessage(
@@ -162,36 +167,36 @@ export class AgentMockService implements IAgentService {
     session: SessionState
   ): void {
     switch (session.step) {
-      case 'await_initial_text':
-        session.step = 'await_yes_no';
+      case SessionStep.AwaitInitialText:
+        session.step = SessionStep.AwaitYesNo;
         this.emit(conversationId, this.yesNoQuestion());
         return;
 
-      case 'await_yes_no': {
+      case SessionStep.AwaitYesNo: {
         const acceptedFirst =
           'option' === data.content.kind && '1' === data.content.id;
         if (acceptedFirst) {
-          session.step = 'closed';
+          session.step = SessionStep.Closed;
           this.emit(conversationId, this.finalAccepted());
         } else {
-          session.step = 'await_domain';
+          session.step = SessionStep.AwaitDomain;
           this.emit(conversationId, this.domainQuestion());
         }
         return;
       }
 
-      case 'await_domain':
-        session.step = 'await_difficulty';
+      case SessionStep.AwaitDomain:
+        session.step = SessionStep.AwaitDifficulty;
         this.emit(conversationId, this.difficultyQuestion());
         return;
 
-      case 'await_difficulty':
-        session.step = 'await_dataset_size';
+      case SessionStep.AwaitDifficulty:
+        session.step = SessionStep.AwaitDatasetSize;
         this.emit(conversationId, this.datasetSizeQuestion());
         return;
 
-      case 'await_dataset_size':
-        session.step = 'closed';
+      case SessionStep.AwaitDatasetSize:
+        session.step = SessionStep.Closed;
         this.emit(conversationId, this.finalNarrowed());
         return;
 

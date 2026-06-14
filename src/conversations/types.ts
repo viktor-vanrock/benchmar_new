@@ -58,3 +58,19 @@ export type AgentClientMessagePayload = {
 export type AgentOutgoingPayload =
   | AgentInitPayload
   | AgentClientMessagePayload;
+
+export type AgentMessageHandler = (payload: AgentMessagePayload) => void;
+
+export type StartChatParams = {
+  conversationId?: string;
+  userId: string;
+  onAgent: AgentMessageHandler;
+};
+
+export type SendUserMessageParams = {
+  conversationId: string;
+  kind: UserMessageContent['kind'];
+  value: string;
+  label?: string;
+  onAgent: AgentMessageHandler;
+};

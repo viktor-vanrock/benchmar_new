@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '@/auth/auth.module';
+import { WsJwtAuthGuard } from '@/auth/jwt/ws-jwt-auth.guard';
 import { agentServiceProvider } from './agent/agent.provider';
 import { AgentWsService } from './agent/agent.ws.service';
 import { ConversationsController } from './conversations.controller';
@@ -8,6 +10,7 @@ import { AgentMockService } from './mock/agent.mock.service';
 import { conversationsRepositoryProvider } from './repository/conversations.repository.provider';
 
 @Module({
+  imports: [AuthModule],
   controllers: [ConversationsController],
   providers: [
     ConversationsService,
@@ -16,6 +19,7 @@ import { conversationsRepositoryProvider } from './repository/conversations.repo
     AgentWsService,
     agentServiceProvider,
     conversationsRepositoryProvider,
+    WsJwtAuthGuard,
   ],
   exports: [ConversationsService],
 })

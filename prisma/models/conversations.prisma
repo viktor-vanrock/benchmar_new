@@ -32,7 +32,6 @@ model Conversation {
   messages Message[]
 
   @@index([userId])
-  @@index([status])
   @@map("conversations")
 }
 
