@@ -8,8 +8,10 @@ import { JwtAuthGuard } from '@/auth/jwt/jwt-auth.guard';
 import { CatalogModule } from '@/catalog/catalog.module';
 import { RolesGuard } from '@/common/guards/roles.guard';
 import adminConfig from '@/configs/admin.config';
+import agentConfig from '@/configs/agent.config';
 import configuration from '@/configs/configuration';
 import dbConfig from '@/configs/database.config';
+import { ConversationsModule } from '@/conversations/conversations.module';
 import { MetricsModule } from '@/metrics/metrics.module';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { UsersModule } from '@/users/users.module';
@@ -23,6 +25,7 @@ import { UsersModule } from '@/users/users.module';
         configuration,
         dbConfig,
         adminConfig,
+        agentConfig,
         // redisConfig,
       ],
       cache: true,
@@ -32,6 +35,7 @@ import { UsersModule } from '@/users/users.module';
     PrismaModule,
     CatalogModule,
     MetricsModule,
+    ConversationsModule,
   ],
   controllers: [AppController],
   providers: [
