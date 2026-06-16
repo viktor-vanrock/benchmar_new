@@ -14,6 +14,7 @@ import {
   MessageKind,
   MessageRole,
 } from '@/generated/prisma/client';
+import { RecommendationsService } from '@/recommendations/recommendations.service';
 import { IAgentService } from './agent/agent.service.interface';
 import { IConversationsRepository } from './repository/conversations.repository.interface';
 import {
@@ -22,6 +23,7 @@ import {
   AgentMessageOption,
   AgentMessagePayload,
   AgentQuestionContent,
+  AgentResultContent,
   ConversationWithMessages,
   HistoryEntry,
   SendUserMessageParams,
@@ -48,7 +50,8 @@ export class ConversationsService implements OnModuleDestroy {
     @Inject(IConversationsRepository)
     private readonly repository: IConversationsRepository,
     @Inject(IAgentService)
-    private readonly agent: IAgentService
+    private readonly agent: IAgentService,
+    private readonly recommendationsService: RecommendationsService
   ) {}
 
   async findAll(
@@ -61,6 +64,14 @@ export class ConversationsService implements OnModuleDestroy {
 
   async findByIdWithMessages(id: string): Promise<ConversationWithMessages> {
     const conversation = await this.repository.findByIdWithMessages(id);
+    if (!conversation) {
+      throw new NotFoundException(`Conversation "${id}" was not found`);
+    }
+    return conversation;
+  }
+
+  async findById(id: string): Promise<Conversation> {
+    const conversation = await this.repository.findById(id);
     if (!conversation) {
       throw new NotFoundException(`Conversation "${id}" was not found`);
     }
@@ -107,7 +118,6 @@ export class ConversationsService implements OnModuleDestroy {
    * Обрабатывает входящее сообщение юзера.
    * - валидирует существование чата и активной сессии
    * - сохраняет сообщение в БД
-   * - пересылает в мок
    */
   async sendUserMessage(params: SendUserMessageParams): Promise<void> {
     const conversation = await this.repository.findById(params.conversationId);
@@ -117,7 +127,10 @@ export class ConversationsService implements OnModuleDestroy {
       );
     }
 
-    if (conversation.status !== ConversationStatus.active) {
+    if (
+      conversation.status !== ConversationStatus.active &&
+      conversation.status !== ConversationStatus.awaiting_choice
+    ) {
       throw new NotFoundException(
         `Conversation "${params.conversationId}" is not active`
       );
@@ -136,22 +149,56 @@ export class ConversationsService implements OnModuleDestroy {
       });
     }
 
-    const content: UserMessageContent =
-      'option' === params.kind
-        ? {
-          kind: 'option',
+    let content: UserMessageContent;
+    let persistedKind: MessageKind;
+    let persistedContent: string;
+    let persistedOptionId: string | null = null;
+
+    switch (params.kind) {
+      case MessageKind.option: {
+        content = {
+          kind: MessageKind.option,
           id: params.value,
           label: params.label ?? params.value,
-        }
-        : { kind: 'text', label: params.value };
+        };
+        persistedKind = MessageKind.option;
+        persistedContent = content.label;
+        persistedOptionId = params.value;
+        break;
+      }
+      case MessageKind.recommendation_selected: {
+        content = {
+          kind: MessageKind.recommendation_selected,
+          benchmarkId: params.value,
+        };
+        persistedKind = MessageKind.recommendation_selected;
+        persistedContent = params.value;
+        break;
+      }
+      case MessageKind.recommendation_rejected: {
+        content = {
+          kind: MessageKind.recommendation_rejected,
+          benchmarkId: params.value,
+        };
+        persistedKind = MessageKind.recommendation_rejected;
+        persistedContent = params.value;
+        break;
+      }
+      case MessageKind.text:
+      default: {
+        content = { kind: MessageKind.text, label: params.value };
+        persistedKind = MessageKind.text;
+        persistedContent = params.value;
+        break;
+      }
+    }
 
     await this.repository.createMessage({
       conversationId: params.conversationId,
       role: MessageRole.user,
-      kind:
-        'option' === params.kind ? MessageKind.option : MessageKind.text,
-      content: content.label,
-      optionId: 'option' === params.kind ? params.value : null,
+      kind: persistedKind,
+      content: persistedContent,
+      optionId: persistedOptionId,
       options: null,
     });
 
@@ -219,11 +266,11 @@ export class ConversationsService implements OnModuleDestroy {
             : null,
         });
       } else {
-        // result
+        // result — рекомендация от агента
         await this.repository.createMessage({
           conversationId,
           role: MessageRole.agent,
-          kind: MessageKind.text,
+          kind: MessageKind.result,
           content: payload.content.label,
           optionId: null,
           options: {
@@ -231,13 +278,26 @@ export class ConversationsService implements OnModuleDestroy {
             status: payload.content.status,
           },
         });
+
+        await this.recommendationsService.createMany({
+          conversationId,
+          benchmarkIds: [payload.content.benchmarkId],
+        });
+
+        // переводим чат в ожидание выбора пользователя.
+        // сессию НЕ закрываем — юзер ещё должен выбрать/отклонить.
+        await this.repository.updateStatus(
+          conversationId,
+          ConversationStatus.awaiting_choice
+        );
       }
 
       // отдать на фронт
       onAgent(payload);
 
-      // финал — закрыть сессию и обновить статус
-      if (payload.isFinal) {
+      // финал — только для НЕ-result сообщений
+      // (приходит уже после того, как юзер выбрал/отклонил рекомендацию)
+      if (payload.isFinal && 'result' !== payload.type) {
         await this.repository.updateStatus(
           conversationId,
           ConversationStatus.completed
@@ -245,13 +305,25 @@ export class ConversationsService implements OnModuleDestroy {
         this.closeSession(conversationId);
       }
     } catch (error) {
+      const message = (error as Error).message ?? 'Internal error';
       this.logger.error(
-        `Failed to process agent message for conversationId="${conversationId}": ${(error as Error).message}`
+        `Failed to process agent message for conversationId="${conversationId}": ${message}`
       );
+      // даём фронту знать про ошибку
+      onAgent({
+        type: 'error',
+        isFinal: true,
+        content: { message },
+      });
     }
   }
 
-  private assertAgentPayload(payload: AgentMessagePayload): void {
+  private assertAgentPayload(
+    payload: AgentMessagePayload
+  ): asserts payload is Extract<
+    AgentMessagePayload,
+    { type: 'question' | 'result' }
+  > {
     if (!payload || typeof payload !== 'object') {
       throw new Error('Invalid agent payload: not an object');
     }
@@ -274,6 +346,29 @@ export class ConversationsService implements OnModuleDestroy {
   }
 
   private toHistoryEntry(m: Message): HistoryEntry {
+    if (m.role === MessageRole.agent && m.kind === MessageKind.result) {
+      const opts = (m.options ?? {}) as {
+        benchmarkId?: string;
+        status?: AgentResultContent['status'];
+      };
+
+      if (!opts.benchmarkId || !opts.status) {
+        this.logger.warn(
+          `Corrupted result message options: messageId="${m.id}" conversationId="${m.conversationId}" options=${JSON.stringify(m.options)}`
+        );
+      }
+
+      return {
+        role: MessageRole.agent,
+        content: {
+          kind: MessageKind.result,
+          label: m.content,
+          benchmarkId: opts.benchmarkId ?? '',
+          status: opts.status ?? 'done',
+        },
+      };
+    }
+
     if (m.role === MessageRole.agent) {
       const options =
         Array.isArray(m.options) && m.options.length > 0
@@ -281,24 +376,44 @@ export class ConversationsService implements OnModuleDestroy {
           : null;
 
       const content: AgentQuestionContent = {
-        kind: 'question',
+        kind: MessageKind.question,
         label: m.content,
         ...(options ? { options } : {}),
       };
 
-      return { role: 'agent', content };
+      return { role: MessageRole.agent, content };
     }
 
     if (m.kind === MessageKind.option && m.optionId) {
       return {
-        role: 'user',
-        content: { kind: 'option', id: m.optionId, label: m.content },
+        role: MessageRole.user,
+        content: { kind: MessageKind.option, id: m.optionId, label: m.content },
+      };
+    }
+
+    if (m.kind === MessageKind.recommendation_selected) {
+      return {
+        role: MessageRole.user,
+        content: {
+          kind: MessageKind.recommendation_selected,
+          benchmarkId: m.content,
+        },
+      };
+    }
+
+    if (m.kind === MessageKind.recommendation_rejected) {
+      return {
+        role: MessageRole.user,
+        content: {
+          kind: MessageKind.recommendation_rejected,
+          benchmarkId: m.content,
+        },
       };
     }
 
     return {
-      role: 'user',
-      content: { kind: 'text', label: m.content },
+      role: MessageRole.user,
+      content: { kind: MessageKind.text, label: m.content },
     };
   }
 }

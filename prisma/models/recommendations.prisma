@@ -1,0 +1,23 @@
+enum RecommendationStatus {
+  pending
+  selected
+  rejected
+}
+
+model Recommendation {
+  id String @id @default(uuid()) @db.Uuid
+
+  conversationId String       @map("conversation_id") @db.Uuid
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  benchmarkId String @map("benchmark_id") @db.VarChar(160)
+
+  status RecommendationStatus @default(pending)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([conversationId])
+  @@unique([conversationId, benchmarkId])
+  @@map("recommendations")
+}

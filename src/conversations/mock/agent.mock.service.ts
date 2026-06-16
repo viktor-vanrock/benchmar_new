@@ -1,8 +1,10 @@
 import { EventEmitter } from 'events';
 import { Injectable, Logger } from '@nestjs/common';
+import { MessageKind } from '@/generated/prisma/enums';
 import { IAgentService } from '../agent/agent.service.interface';
 import { SessionState as SessionStateAgentWsService } from '../agent/agent.ws.service';
 import {
+  AgentClientMessagePayload,
   AgentMessagePayload,
   AgentOutgoingPayload,
   HistoryEntry,
@@ -163,9 +165,16 @@ export class AgentMockService implements IAgentService {
 
   private handleClientMessage(
     conversationId: string,
-    data: { content: { kind: 'text' | 'option'; id?: string; label: string } },
+    data: AgentClientMessagePayload,
     session: SessionState
   ): void {
+    if (
+      MessageKind.recommendation_selected === data.content.kind ||
+      MessageKind.recommendation_rejected === data.content.kind
+    ) {
+      return;
+    }
+
     switch (session.step) {
       case SessionStep.AwaitInitialText:
         session.step = SessionStep.AwaitYesNo;

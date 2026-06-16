@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@/auth/auth.module';
 import { WsJwtAuthGuard } from '@/auth/jwt/ws-jwt-auth.guard';
+import { RecommendationsModule } from '@/recommendations/recommendations.module';
 import { agentServiceProvider } from './agent/agent.provider';
 import { AgentWsService } from './agent/agent.ws.service';
 import { ConversationsController } from './conversations.controller';
@@ -10,7 +11,7 @@ import { AgentMockService } from './mock/agent.mock.service';
 import { conversationsRepositoryProvider } from './repository/conversations.repository.provider';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, RecommendationsModule],
   controllers: [ConversationsController],
   providers: [
     ConversationsService,

@@ -6,6 +6,11 @@ export const conversationFullInclude = {
       createdAt: 'asc',
     },
   },
+  recommendations: {
+    orderBy: {
+      createdAt: 'asc',
+    },
+  },
 } satisfies Prisma.ConversationInclude;
 
 export type ConversationWithMessages = Prisma.ConversationGetPayload<{
@@ -30,18 +35,19 @@ export type AgentResultContent = {
   status: 'finished' | 'done';
 };
 
-export type AgentMessagePayload = {
-  type: 'question' | 'result';
-  isFinal: boolean;
-  content: AgentQuestionContent | AgentResultContent;
-};
+export type AgentMessagePayload =
+  | { type: 'question'; isFinal: boolean; content: AgentQuestionContent }
+  | { type: 'result'; isFinal: boolean; content: AgentResultContent }
+  | { type: 'error'; isFinal: true; content: { message: string } };
 
 export type UserMessageContent =
   | { kind: 'text'; label: string }
-  | { kind: 'option'; id: string; label: string };
+  | { kind: 'option'; id: string; label: string }
+  | { kind: 'recommendation_selected'; benchmarkId: string }
+  | { kind: 'recommendation_rejected'; benchmarkId: string };
 
 export type HistoryEntry =
-  | { role: 'agent'; content: AgentQuestionContent }
+  | { role: 'agent'; content: AgentQuestionContent | AgentResultContent }
   | { role: 'user'; content: UserMessageContent };
 
 export type AgentInitPayload = {

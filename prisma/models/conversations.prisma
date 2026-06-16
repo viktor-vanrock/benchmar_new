@@ -1,5 +1,6 @@
 enum ConversationStatus {
   active
+  awaiting_choice
   completed
   abandoned
 }
@@ -18,6 +19,9 @@ enum MessageKind {
   question
   option
   text
+  recommendation_selected
+  recommendation_rejected
+  result
 }
 
 model Conversation {
@@ -29,7 +33,8 @@ model Conversation {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  messages Message[]
+  messages        Message[]
+  recommendations Recommendation[]
 
   @@index([userId])
   @@map("conversations")
