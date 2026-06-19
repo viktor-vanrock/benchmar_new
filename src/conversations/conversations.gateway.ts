@@ -13,9 +13,11 @@ import { WsJwtAuthGuard } from '@/auth/jwt/ws-jwt-auth.guard';
 import { WsCurrentUser } from '@/common/decorators/wsCurrentUser.decorator';
 import { WsEvent } from '@/common/enums/wsEvents.enum';
 import { ConversationStatus, RecommendationStatus } from '@/generated/prisma/enums';
+import { HypothesisGenerationWithHypotheses } from '@/hypotheses/types';
 import { RecommendationActionDto } from '@/recommendations/dto/recommendationAction.dto';
 import { RecommendationsService } from '@/recommendations/recommendations.service';
 import { ConversationsService } from './conversations.service';
+import { RegenerateHypothesesDto } from './dto/regenerateHypotheses.dto';
 import { SendMessageDto } from './dto/sendMessage.dto';
 import { StartChatDto } from './dto/startChat.dto';
 import { AgentMessagePayload } from './types';
@@ -69,6 +71,8 @@ implements OnGatewayConnection, OnGatewayDisconnect
         conversationId: body?.conversationId,
         userId: user.id,
         onAgent: (payload) => this.pushAgentMessage(client, payload),
+        onHypotheses: (generation) =>
+          this.pushHypothesesGenerated(client, generation),
       });
 
       this.bindSocket(client, conversationId);
@@ -93,6 +97,8 @@ implements OnGatewayConnection, OnGatewayDisconnect
         value: body.value,
         label: body.label,
         onAgent: (payload) => this.pushAgentMessage(client, payload),
+        onHypotheses: (generation) =>
+          this.pushHypothesesGenerated(client, generation),
       });
     } catch (error) {
       this.handleError(client, error, 'Failed to send message');
@@ -121,6 +127,8 @@ implements OnGatewayConnection, OnGatewayDisconnect
         kind: 'recommendation_selected',
         value: recommendation.benchmarkId,
         onAgent: (payload) => this.pushAgentMessage(client, payload),
+        onHypotheses: (generation) =>
+          this.pushHypothesesGenerated(client, generation),
       });
 
       // 3) агент принял — только теперь безопасно перепривязать сокет
@@ -169,6 +177,8 @@ implements OnGatewayConnection, OnGatewayDisconnect
         kind: 'recommendation_rejected',
         value: recommendation.benchmarkId,
         onAgent: (payload) => this.pushAgentMessage(client, payload),
+        onHypotheses: (generation) =>
+          this.pushHypothesesGenerated(client, generation),
       });
 
       // 3) агент принял — только теперь безопасно перепривязать сокет
@@ -195,6 +205,27 @@ implements OnGatewayConnection, OnGatewayDisconnect
     }
   }
 
+  @SubscribeMessage(WsEvent.RegenerateHypotheses)
+  async onRegenerateHypotheses(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: RegenerateHypothesesDto
+  ): Promise<void> {
+    try {
+      this.logger.log(
+        `Regenerating hypotheses: conversationId="${body.conversationId}" clientId="${client.id}"`
+      );
+      this.bindSocket(client, body.conversationId);
+      await this.service.regenerateHypotheses({
+        conversationId: body.conversationId,
+        onAgent: (payload) => this.pushAgentMessage(client, payload),
+        onHypotheses: (generation) =>
+          this.pushHypothesesGenerated(client, generation),
+      });
+    } catch (error) {
+      this.handleError(client, error, 'Failed to regenerate hypotheses');
+    }
+  }
+
   private bindSocket(client: Socket, conversationId: string): void {
     const previous = this.socketByConversation.get(conversationId);
     if (previous && previous !== client.id) {
@@ -217,6 +248,13 @@ implements OnGatewayConnection, OnGatewayDisconnect
     payload: AgentMessagePayload
   ): void {
     client.emit(WsEvent.AgentMessage, payload);
+  }
+
+  private pushHypothesesGenerated(
+    client: Socket,
+    generation: HypothesisGenerationWithHypotheses
+  ): void {
+    client.emit(WsEvent.HypothesesGenerated, generation);
   }
 
   private handleError(client: Socket, error: unknown, fallback: string): void {

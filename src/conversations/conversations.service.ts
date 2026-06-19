@@ -14,6 +14,7 @@ import {
   MessageKind,
   MessageRole,
 } from '@/generated/prisma/client';
+import { HypothesesService } from '@/hypotheses/hypotheses.service';
 import { RecommendationsService } from '@/recommendations/recommendations.service';
 import { IAgentService } from './agent/agent.service.interface';
 import { IConversationsRepository } from './repository/conversations.repository.interface';
@@ -26,6 +27,7 @@ import {
   AgentResultContent,
   ConversationWithMessages,
   HistoryEntry,
+  HypothesesGeneratedHandler,
   SendUserMessageParams,
   StartChatParams,
   UserMessageContent,
@@ -51,7 +53,8 @@ export class ConversationsService implements OnModuleDestroy {
     private readonly repository: IConversationsRepository,
     @Inject(IAgentService)
     private readonly agent: IAgentService,
-    private readonly recommendationsService: RecommendationsService
+    private readonly recommendationsService: RecommendationsService,
+    private readonly hypothesesService: HypothesesService
   ) {}
 
   async findAll(
@@ -99,7 +102,7 @@ export class ConversationsService implements OnModuleDestroy {
 
     const conversationId = conversation.id;
 
-    this.openSession(conversationId, params.onAgent);
+    this.openSession(conversationId, params.onAgent, params.onHypotheses);
 
     const history = await this.buildHistory(conversationId);
 
@@ -139,7 +142,7 @@ export class ConversationsService implements OnModuleDestroy {
     // Если по какой-то причине нет открытой сессии (рестарт сервера) —
     // поднимаем её и проигрываем init по истории прежде чем слать сообщение.
     if (!this.activeSessions.has(params.conversationId)) {
-      this.openSession(params.conversationId, params.onAgent);
+      this.openSession(params.conversationId, params.onAgent, params.onHypotheses);
 
       const history = await this.buildHistory(params.conversationId);
       this.agent.send(params.conversationId, {
@@ -208,6 +211,42 @@ export class ConversationsService implements OnModuleDestroy {
     });
   }
 
+  /**
+   * Перегенерация гипотез по существующему чату.
+   * Шлём агенту всю историю как init — он ответит payload'ом с type: 'hypotheses',
+   * handleAgentMessage сам сохранит новую попытку (attemptNumber инкрементируется).
+   */
+  async regenerateHypotheses(params: Pick<SendUserMessageParams, 'conversationId' | 'onAgent' | 'onHypotheses'>): Promise<void> {
+    const conversation = await this.repository.findById(params.conversationId);
+    if (!conversation) {
+      throw new NotFoundException(
+        `Conversation "${params.conversationId}" was not found`
+      );
+    }
+
+    // если сессии нет (рестарт сервера / новый сокет) — поднимаем её
+    if (!this.activeSessions.has(params.conversationId)) {
+      this.openSession(params.conversationId, params.onAgent, params.onHypotheses);
+    } else {
+      // пере-подписываем актуальный сокет на ту же сессию
+      this.openSession(params.conversationId, params.onAgent, params.onHypotheses);
+    }
+
+    const history = await this.buildHistory(params.conversationId);
+
+    const initPayload: AgentInitPayload = {
+      type: 'init',
+      intent: conversation.intent,
+      history,
+    };
+
+    this.logger.log(
+      `Regenerating hypotheses: conversationId="${params.conversationId}", historySize=${history.length}`
+    );
+
+    this.agent.send(params.conversationId, initPayload);
+  }
+
   /** Корректно закрыть сессию (по disconnect или isFinal). */
   closeSession(conversationId: string): void {
     if (!this.activeSessions.has(conversationId)) return;
@@ -228,10 +267,11 @@ export class ConversationsService implements OnModuleDestroy {
 
   private openSession(
     conversationId: string,
-    onAgent: AgentMessageHandler
+    onAgent: AgentMessageHandler,
+    onHypotheses?: HypothesesGeneratedHandler
   ): void {
     const subscribe = (payload: AgentMessagePayload): void => {
-      void this.handleAgentMessage(conversationId, payload, onAgent);
+      void this.handleAgentMessage(conversationId, payload, onAgent, onHypotheses);
     };
 
     if (this.activeSessions.has(conversationId)) {
@@ -248,13 +288,14 @@ export class ConversationsService implements OnModuleDestroy {
   private async handleAgentMessage(
     conversationId: string,
     payload: AgentMessagePayload,
-    onAgent: AgentMessageHandler
+    onAgent: AgentMessageHandler,
+    onHypotheses?: HypothesesGeneratedHandler
   ): Promise<void> {
     try {
       this.assertAgentPayload(payload);
 
       // persist сообщение агента
-      if ('question' === payload.content.kind) {
+      if ('question' === payload.type) {
         await this.repository.createMessage({
           conversationId,
           role: MessageRole.agent,
@@ -265,7 +306,7 @@ export class ConversationsService implements OnModuleDestroy {
             ? (payload.content.options)
             : null,
         });
-      } else {
+      } else if ('result' === payload.type) {
         // result — рекомендация от агента
         await this.repository.createMessage({
           conversationId,
@@ -290,14 +331,31 @@ export class ConversationsService implements OnModuleDestroy {
           conversationId,
           ConversationStatus.awaiting_choice
         );
+      } else if ('hypotheses' === payload.type) {
+        // hypotheses — пачка гипотез от агента
+        await this.repository.createMessage({
+          conversationId,
+          role: MessageRole.agent,
+          kind: MessageKind.text,
+          content: `hypotheses:${payload.content.hypotheses.length}`,
+          optionId: null,
+          options: { benchmarkId: payload.content.benchmarkId },
+        });
+
+        const generation = await this.hypothesesService.createGeneration({
+          conversationId,
+          benchmarkId: payload.content.benchmarkId,
+          hypotheses: payload.content.hypotheses,
+        });
+
+        // отдать структурированную генерацию на фронт отдельным событием
+        onHypotheses?.(generation);
       }
 
       // отдать на фронт
       onAgent(payload);
 
-      // финал — только для НЕ-result сообщений
-      // (приходит уже после того, как юзер выбрал/отклонил рекомендацию)
-      if (payload.isFinal && 'result' !== payload.type) {
+      if (payload.isFinal && 'question' === payload.type) {
         await this.repository.updateStatus(
           conversationId,
           ConversationStatus.completed
@@ -322,12 +380,16 @@ export class ConversationsService implements OnModuleDestroy {
     payload: AgentMessagePayload
   ): asserts payload is Extract<
     AgentMessagePayload,
-    { type: 'question' | 'result' }
+    { type: 'question' | 'result' | 'hypotheses' }
   > {
     if (!payload || typeof payload !== 'object') {
       throw new Error('Invalid agent payload: not an object');
     }
-    if (payload.type !== 'question' && payload.type !== 'result') {
+    if (
+      payload.type !== 'question' &&
+      payload.type !== 'result' &&
+      payload.type !== 'hypotheses'
+    ) {
       throw new Error(`Invalid agent payload: unknown type "${String((payload as { type?: unknown }).type)}"`);
     }
     if (!payload.content || typeof payload.content !== 'object') {

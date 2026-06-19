@@ -1,4 +1,5 @@
 import { Prisma } from '@/generated/prisma/client';
+import { HypothesisGenerationWithHypotheses } from '@/hypotheses/types';
 
 export const conversationFullInclude = {
   messages: {
@@ -35,9 +36,16 @@ export type AgentResultContent = {
   status: 'finished' | 'done';
 };
 
+export type AgentHypothesesContent = {
+  kind: 'hypotheses';
+  hypotheses: string[];
+  benchmarkId: string;
+};
+
 export type AgentMessagePayload =
   | { type: 'question'; isFinal: boolean; content: AgentQuestionContent }
   | { type: 'result'; isFinal: boolean; content: AgentResultContent }
+  | { type: 'hypotheses'; isFinal: boolean; content: AgentHypothesesContent }
   | { type: 'error'; isFinal: true; content: { message: string } };
 
 export type UserMessageContent =
@@ -67,10 +75,15 @@ export type AgentOutgoingPayload =
 
 export type AgentMessageHandler = (payload: AgentMessagePayload) => void;
 
+export type HypothesesGeneratedHandler = (
+  generation: HypothesisGenerationWithHypotheses
+) => void;
+
 export type StartChatParams = {
   conversationId?: string;
   userId: string;
   onAgent: AgentMessageHandler;
+  onHypotheses?: HypothesesGeneratedHandler;
 };
 
 export type SendUserMessageParams = {
@@ -79,4 +92,5 @@ export type SendUserMessageParams = {
   value: string;
   label?: string;
   onAgent: AgentMessageHandler;
+  onHypotheses?: HypothesesGeneratedHandler;
 };

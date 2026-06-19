@@ -10,6 +10,10 @@ export enum WsEvent {
   RejectRecommendation = 'reject_recommendation',
   RecommendationUpdated = 'recommendation_updated',
 
+  // гипотезы
+  RegenerateHypotheses = 'regenerate_hypotheses',
+  HypothesesGenerated = 'hypotheses_generated',
+
   // ошибки
   Error = 'error'
 }
