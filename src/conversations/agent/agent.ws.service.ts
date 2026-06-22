@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import WebSocket, { RawData } from 'ws';
+import { AgentMessageType } from '@/common/enums/agentMessageType.enum';
 import { AgentEnvType } from '@/configs/types';
 import { AgentMessagePayload, AgentOutgoingPayload } from '../types';
 import {
@@ -374,7 +375,7 @@ implements IAgentService, OnModuleInit, OnModuleDestroy {
   private isAgentMessagePayload(value: unknown): value is AgentMessagePayload {
     if (!value || typeof value !== 'object') return false;
     const obj = value as { type?: unknown; content?: unknown; isFinal?: unknown };
-    if (obj.type !== 'question' && obj.type !== 'result') return false;
+    if (obj.type !== AgentMessageType.Question && obj.type !== AgentMessageType.Result) return false;
     if (typeof obj.isFinal !== 'boolean') return false;
     if (!obj.content || typeof obj.content !== 'object') return false;
     const content = obj.content as { kind?: unknown };

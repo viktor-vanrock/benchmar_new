@@ -25,9 +25,11 @@ export class HypothesesRepository implements IHypothesesRepository {
     );
 
     return this.prisma.$transaction(async (tx) => {
-      // Атомарно получаем следующий attemptNumber внутри транзакции.
-      // На уровне БД защищены @@unique([conversationId, attemptNumber]) —
-      // если двое одновременно зайдут, второй упадёт на P2002.
+      // Берём advisory-блокировку на время транзакции (ключ — хэш conversationId).
+      // Она сериализует выдачу attemptNumber только для одного и того же чата
+      // (разные чаты друг друга не блокируют) и сама снимается на commit/rollback.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${params.conversationId}, 0))`;
+
       const count = await tx.hypothesisGeneration.count({
         where: { conversationId: params.conversationId },
       });

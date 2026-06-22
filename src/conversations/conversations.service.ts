@@ -6,6 +6,7 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { PaginationDto } from '@/common/dtos/paginationDto.dto';
+import { AgentMessageType } from '@/common/enums/agentMessageType.enum';
 import { InfiniteDataResponseType } from '@/common/types/infiniteDataResponse.type';
 import {
   Conversation,
@@ -295,7 +296,7 @@ export class ConversationsService implements OnModuleDestroy {
       this.assertAgentPayload(payload);
 
       // persist сообщение агента
-      if ('question' === payload.type) {
+      if (AgentMessageType.Question === payload.type) {
         await this.repository.createMessage({
           conversationId,
           role: MessageRole.agent,
@@ -306,7 +307,7 @@ export class ConversationsService implements OnModuleDestroy {
             ? (payload.content.options)
             : null,
         });
-      } else if ('result' === payload.type) {
+      } else if (AgentMessageType.Result === payload.type) {
         // result — рекомендация от агента
         await this.repository.createMessage({
           conversationId,
@@ -331,7 +332,7 @@ export class ConversationsService implements OnModuleDestroy {
           conversationId,
           ConversationStatus.awaiting_choice
         );
-      } else if ('hypotheses' === payload.type) {
+      } else if (AgentMessageType.Hypotheses === payload.type) {
         // hypotheses — пачка гипотез от агента
         await this.repository.createMessage({
           conversationId,
@@ -355,7 +356,7 @@ export class ConversationsService implements OnModuleDestroy {
       // отдать на фронт
       onAgent(payload);
 
-      if (payload.isFinal && 'question' === payload.type) {
+      if (payload.isFinal && AgentMessageType.Question === payload.type) {
         await this.repository.updateStatus(
           conversationId,
           ConversationStatus.completed
@@ -369,7 +370,7 @@ export class ConversationsService implements OnModuleDestroy {
       );
       // даём фронту знать про ошибку
       onAgent({
-        type: 'error',
+        type: AgentMessageType.Error,
         isFinal: true,
         content: { message },
       });
@@ -380,15 +381,15 @@ export class ConversationsService implements OnModuleDestroy {
     payload: AgentMessagePayload
   ): asserts payload is Extract<
     AgentMessagePayload,
-    { type: 'question' | 'result' | 'hypotheses' }
+    { type: AgentMessageType.Question | AgentMessageType.Result | AgentMessageType.Hypotheses }
   > {
     if (!payload || typeof payload !== 'object') {
       throw new Error('Invalid agent payload: not an object');
     }
     if (
-      payload.type !== 'question' &&
-      payload.type !== 'result' &&
-      payload.type !== 'hypotheses'
+      payload.type !== AgentMessageType.Question &&
+      payload.type !== AgentMessageType.Result &&
+      payload.type !== AgentMessageType.Hypotheses
     ) {
       throw new Error(`Invalid agent payload: unknown type "${String((payload as { type?: unknown }).type)}"`);
     }

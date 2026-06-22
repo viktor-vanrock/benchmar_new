@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { Injectable, Logger } from '@nestjs/common';
+import { AgentMessageType } from '@/common/enums/agentMessageType.enum';
 import { MessageKind } from '@/generated/prisma/enums';
 import { IAgentService } from '../agent/agent.service.interface';
 import { SessionState as SessionStateAgentWsService } from '../agent/agent.ws.service';
@@ -224,7 +225,7 @@ export class AgentMockService implements IAgentService {
 
   private initialQuestion(): AgentMessagePayload {
     return {
-      type: 'question',
+      type: AgentMessageType.Question,
       isFinal: false,
       content: {
         kind: 'question',
@@ -236,7 +237,7 @@ export class AgentMockService implements IAgentService {
 
   private yesNoQuestion(): AgentMessagePayload {
     return {
-      type: 'question',
+      type: AgentMessageType.Question,
       isFinal: false,
       content: {
         kind: 'question',
@@ -251,7 +252,7 @@ export class AgentMockService implements IAgentService {
 
   private domainQuestion(): AgentMessagePayload {
     return {
-      type: 'question',
+      type: AgentMessageType.Question,
       isFinal: false,
       content: {
         kind: 'question',
@@ -267,7 +268,7 @@ export class AgentMockService implements IAgentService {
 
   private difficultyQuestion(): AgentMessagePayload {
     return {
-      type: 'question',
+      type: AgentMessageType.Question,
       isFinal: false,
       content: {
         kind: 'question',
@@ -283,7 +284,7 @@ export class AgentMockService implements IAgentService {
 
   private datasetSizeQuestion(): AgentMessagePayload {
     return {
-      type: 'question',
+      type: AgentMessageType.Question,
       isFinal: false,
       content: {
         kind: 'question',
@@ -299,7 +300,7 @@ export class AgentMockService implements IAgentService {
 
   private finalAccepted(): AgentMessagePayload {
     return {
-      type: 'result',
+      type: AgentMessageType.Result,
       isFinal: true,
       content: {
         kind: 'result',
@@ -312,7 +313,7 @@ export class AgentMockService implements IAgentService {
 
   private finalNarrowed(): AgentMessagePayload {
     return {
-      type: 'result',
+      type: AgentMessageType.Result,
       isFinal: true,
       content: {
         kind: 'result',

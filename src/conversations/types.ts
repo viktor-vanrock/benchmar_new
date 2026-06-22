@@ -1,3 +1,4 @@
+import { AgentMessageType } from '@/common/enums/agentMessageType.enum';
 import { Prisma } from '@/generated/prisma/client';
 import { HypothesisGenerationWithHypotheses } from '@/hypotheses/types';
 
@@ -43,10 +44,10 @@ export type AgentHypothesesContent = {
 };
 
 export type AgentMessagePayload =
-  | { type: 'question'; isFinal: boolean; content: AgentQuestionContent }
-  | { type: 'result'; isFinal: boolean; content: AgentResultContent }
-  | { type: 'hypotheses'; isFinal: boolean; content: AgentHypothesesContent }
-  | { type: 'error'; isFinal: true; content: { message: string } };
+  | { type: AgentMessageType.Question; isFinal: boolean; content: AgentQuestionContent }
+  | { type: AgentMessageType.Result; isFinal: boolean; content: AgentResultContent }
+  | { type: AgentMessageType.Hypotheses; isFinal: boolean; content: AgentHypothesesContent }
+  | { type: AgentMessageType.Error; isFinal: true; content: { message: string } };
 
 export type UserMessageContent =
   | { kind: 'text'; label: string }
