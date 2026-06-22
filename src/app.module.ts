@@ -12,6 +12,7 @@ import agentConfig from '@/configs/agent.config';
 import configuration from '@/configs/configuration';
 import dbConfig from '@/configs/database.config';
 import { ConversationsModule } from '@/conversations/conversations.module';
+import { HypothesesModule } from '@/hypotheses/hypotheses.module';
 import { MetricsModule } from '@/metrics/metrics.module';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { UsersModule } from '@/users/users.module';
@@ -35,6 +36,7 @@ import { UsersModule } from '@/users/users.module';
     PrismaModule,
     CatalogModule,
     MetricsModule,
+    HypothesesModule,
     ConversationsModule,
   ],
   controllers: [AppController],

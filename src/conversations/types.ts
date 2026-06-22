@@ -1,7 +1,14 @@
+import { AgentMessageType } from '@/common/enums/agentMessageType.enum';
 import { Prisma } from '@/generated/prisma/client';
+import { HypothesisGenerationWithHypotheses } from '@/hypotheses/types';
 
 export const conversationFullInclude = {
   messages: {
+    orderBy: {
+      createdAt: 'asc',
+    },
+  },
+  recommendations: {
     orderBy: {
       createdAt: 'asc',
     },
@@ -30,18 +37,26 @@ export type AgentResultContent = {
   status: 'finished' | 'done';
 };
 
-export type AgentMessagePayload = {
-  type: 'question' | 'result';
-  isFinal: boolean;
-  content: AgentQuestionContent | AgentResultContent;
+export type AgentHypothesesContent = {
+  kind: 'hypotheses';
+  hypotheses: string[];
+  benchmarkId: string;
 };
+
+export type AgentMessagePayload =
+  | { type: AgentMessageType.Question; isFinal: boolean; content: AgentQuestionContent }
+  | { type: AgentMessageType.Result; isFinal: boolean; content: AgentResultContent }
+  | { type: AgentMessageType.Hypotheses; isFinal: boolean; content: AgentHypothesesContent }
+  | { type: AgentMessageType.Error; isFinal: true; content: { message: string } };
 
 export type UserMessageContent =
   | { kind: 'text'; label: string }
-  | { kind: 'option'; id: string; label: string };
+  | { kind: 'option'; id: string; label: string }
+  | { kind: 'recommendation_selected'; benchmarkId: string }
+  | { kind: 'recommendation_rejected'; benchmarkId: string };
 
 export type HistoryEntry =
-  | { role: 'agent'; content: AgentQuestionContent }
+  | { role: 'agent'; content: AgentQuestionContent | AgentResultContent }
   | { role: 'user'; content: UserMessageContent };
 
 export type AgentInitPayload = {
@@ -61,10 +76,15 @@ export type AgentOutgoingPayload =
 
 export type AgentMessageHandler = (payload: AgentMessagePayload) => void;
 
+export type HypothesesGeneratedHandler = (
+  generation: HypothesisGenerationWithHypotheses
+) => void;
+
 export type StartChatParams = {
   conversationId?: string;
   userId: string;
   onAgent: AgentMessageHandler;
+  onHypotheses?: HypothesesGeneratedHandler;
 };
 
 export type SendUserMessageParams = {
@@ -73,4 +93,5 @@ export type SendUserMessageParams = {
   value: string;
   label?: string;
   onAgent: AgentMessageHandler;
+  onHypotheses?: HypothesesGeneratedHandler;
 };
